@@ -60,6 +60,27 @@ import {
   type SearchUsersResponse
 } from './schemas.js';
 
+interface GitHubConfig {
+  apiBaseUrl: string;
+}
+
+const defaultConfig: GitHubConfig = {
+  apiBaseUrl: 'https://api.github.com',
+};
+
+// Read from environment variables with fallback to defaults
+const currentConfig: GitHubConfig = {
+  apiBaseUrl: process.env.GITHUB_API_URL || defaultConfig.apiBaseUrl,
+};
+
+export function setGitHubConfig(config: Partial<GitHubConfig>) {
+  Object.assign(currentConfig, config);
+}
+
+export function getGitHubConfig(): GitHubConfig {
+  return currentConfig;
+}
+
 const server = new Server(
   {
     name: "github-mcp-server",
@@ -85,8 +106,8 @@ async function forkRepository(
   organization?: string
 ): Promise<GitHubFork> {
   const url = organization
-    ? `https://api.github.com/repos/${owner}/${repo}/forks?organization=${organization}`
-    : `https://api.github.com/repos/${owner}/${repo}/forks`;
+    ? `${getGitHubConfig().apiBaseUrl}/repos/${owner}/${repo}/forks?organization=${organization}`
+    : `${getGitHubConfig().apiBaseUrl}/repos/${owner}/${repo}/forks`;
 
   const response = await fetch(url, {
     method: "POST",
@@ -112,7 +133,7 @@ async function createBranch(
   const fullRef = `refs/heads/${options.ref}`;
 
   const response = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/git/refs`,
+    `${getGitHubConfig().apiBaseUrl}/repos/${owner}/${repo}/git/refs`,
     {
       method: "POST",
       headers: {
@@ -140,7 +161,7 @@ async function getDefaultBranchSHA(
   repo: string
 ): Promise<string> {
   const response = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/git/refs/heads/main`,
+    `${getGitHubConfig().apiBaseUrl}/repos/${owner}/${repo}/git/refs/heads/main`,
     {
       headers: {
         Authorization: `token ${GITHUB_PERSONAL_ACCESS_TOKEN}`,
@@ -152,7 +173,7 @@ async function getDefaultBranchSHA(
 
   if (!response.ok) {
     const masterResponse = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/git/refs/heads/master`,
+      `${getGitHubConfig().apiBaseUrl}/repos/${owner}/${repo}/git/refs/heads/master`,
       {
         headers: {
           Authorization: `token ${GITHUB_PERSONAL_ACCESS_TOKEN}`,
@@ -182,7 +203,7 @@ async function getFileContents(
   path: string,
   branch?: string
 ): Promise<GitHubContent> {
-  let url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+  let url = `${getGitHubConfig().apiBaseUrl}/repos/${owner}/${repo}/contents/${path}`;
   if (branch) {
     url += `?ref=${branch}`;
   }
@@ -215,7 +236,7 @@ async function createIssue(
   options: z.infer<typeof CreateIssueOptionsSchema>
 ): Promise<GitHubIssue> {
   const response = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/issues`,
+    `${getGitHubConfig().apiBaseUrl}/repos/${owner}/${repo}/issues`,
     {
       method: "POST",
       headers: {
@@ -241,7 +262,7 @@ async function createPullRequest(
   options: z.infer<typeof CreatePullRequestOptionsSchema>
 ): Promise<GitHubPullRequest> {
   const response = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/pulls`,
+    `${getGitHubConfig().apiBaseUrl}/repos/${owner}/${repo}/pulls`,
     {
       method: "POST",
       headers: {
@@ -286,7 +307,7 @@ async function createOrUpdateFile(
     }
   }
 
-  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+  const url = `${getGitHubConfig().apiBaseUrl}/repos/${owner}/${repo}/contents/${path}`;
 
   const body = {
     message,
@@ -327,7 +348,7 @@ async function createTree(
   }));
 
   const response = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/git/trees`,
+    `${getGitHubConfig().apiBaseUrl}/repos/${owner}/${repo}/git/trees`,
     {
       method: "POST",
       headers: {
@@ -358,7 +379,7 @@ async function createCommit(
   parents: string[]
 ): Promise<GitHubCommit> {
   const response = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/git/commits`,
+    `${getGitHubConfig().apiBaseUrl}/repos/${owner}/${repo}/git/commits`,
     {
       method: "POST",
       headers: {
@@ -389,7 +410,7 @@ async function updateReference(
   sha: string
 ): Promise<GitHubReference> {
   const response = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/git/refs/${ref}`,
+    `${getGitHubConfig().apiBaseUrl}/repos/${owner}/${repo}/git/refs/${ref}`,
     {
       method: "PATCH",
       headers: {
@@ -420,7 +441,7 @@ async function pushFiles(
   message: string
 ): Promise<GitHubReference> {
   const refResponse = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${branch}`,
+    `${getGitHubConfig().apiBaseUrl}/repos/${owner}/${repo}/git/refs/heads/${branch}`,
     {
       headers: {
         Authorization: `token ${GITHUB_PERSONAL_ACCESS_TOKEN}`,
@@ -449,7 +470,7 @@ async function searchRepositories(
   page: number = 1,
   perPage: number = 30
 ): Promise<GitHubSearchResponse> {
-  const url = new URL("https://api.github.com/search/repositories");
+  const url = new URL(`${getGitHubConfig().apiBaseUrl}/search/repositories`);
   url.searchParams.append("q", query);
   url.searchParams.append("page", page.toString());
   url.searchParams.append("per_page", perPage.toString());
@@ -472,7 +493,7 @@ async function searchRepositories(
 async function createRepository(
   options: z.infer<typeof CreateRepositoryOptionsSchema>
 ): Promise<GitHubRepository> {
-  const response = await fetch("https://api.github.com/user/repos", {
+  const response = await fetch(`${getGitHubConfig().apiBaseUrl}/user/repos`, {
     method: "POST",
     headers: {
       Authorization: `token ${GITHUB_PERSONAL_ACCESS_TOKEN}`,
@@ -497,7 +518,7 @@ async function listCommits(
   perPage: number = 30,
   sha?: string,
 ): Promise<GitHubListCommits> {
-  const url = new URL(`https://api.github.com/repos/${owner}/${repo}/commits`);
+  const url = new URL(`${getGitHubConfig().apiBaseUrl}/repos/${owner}/${repo}/commits`);
   url.searchParams.append("page", page.toString());
   url.searchParams.append("per_page", perPage.toString());
   if (sha) {
@@ -529,7 +550,7 @@ async function listIssues(
   repo: string,
   options: Omit<z.infer<typeof ListIssuesOptionsSchema>, 'owner' | 'repo'>
 ): Promise<GitHubIssue[]> {
-  const url = new URL(`https://api.github.com/repos/${owner}/${repo}/issues`);
+  const url = new URL(`${getGitHubConfig().apiBaseUrl}/repos/${owner}/${repo}/issues`);
 
   // Add query parameters
   if (options.state) url.searchParams.append('state', options.state);
@@ -562,7 +583,7 @@ async function updateIssue(
   options: Omit<z.infer<typeof UpdateIssueOptionsSchema>, 'owner' | 'repo' | 'issue_number'>
 ): Promise<GitHubIssue> {
   const response = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`,
+    `${getGitHubConfig().apiBaseUrl}/repos/${owner}/${repo}/issues/${issueNumber}`,
     {
       method: "PATCH",
       headers: {
@@ -596,7 +617,7 @@ async function addIssueComment(
   body: string
 ): Promise<z.infer<typeof IssueCommentSchema>> {
   const response = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/comments`,
+    `${getGitHubConfig().apiBaseUrl}/repos/${owner}/${repo}/issues/${issueNumber}/comments`,
     {
       method: "POST",
       headers: {
@@ -619,7 +640,7 @@ async function addIssueComment(
 async function searchCode(
   params: z.infer<typeof SearchCodeSchema>
 ): Promise<SearchCodeResponse> {
-  const url = new URL("https://api.github.com/search/code");
+  const url = new URL(`${getGitHubConfig().apiBaseUrl}/search/code`);
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
       url.searchParams.append(key, value.toString());
@@ -644,7 +665,7 @@ async function searchCode(
 async function searchIssues(
   params: z.infer<typeof SearchIssuesSchema>
 ): Promise<SearchIssuesResponse> {
-  const url = new URL("https://api.github.com/search/issues");
+  const url = new URL(`${getGitHubConfig().apiBaseUrl}/search/issues`);
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
       url.searchParams.append(key, value.toString());
@@ -669,7 +690,7 @@ async function searchIssues(
 async function searchUsers(
   params: z.infer<typeof SearchUsersSchema>
 ): Promise<SearchUsersResponse> {
-  const url = new URL("https://api.github.com/search/users");
+  const url = new URL(`${getGitHubConfig().apiBaseUrl}/search/users`);
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
       url.searchParams.append(key, value.toString());
@@ -806,7 +827,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         let sha: string;
         if (args.from_branch) {
           const response = await fetch(
-            `https://api.github.com/repos/${args.owner}/${args.repo}/git/refs/heads/${args.from_branch}`,
+            `${getGitHubConfig().apiBaseUrl}/repos/${args.owner}/${args.repo}/git/refs/heads/${args.from_branch}`,
             {
               headers: {
                 Authorization: `token ${GITHUB_PERSONAL_ACCESS_TOKEN}`,
